@@ -73,11 +73,36 @@ void printResults(const vector<BenchmarkResult>& results) {
     }
 }
 
+void saveResultsToCSV(const vector<BenchmarkResult>& results, const string& filename) {
+    ofstream file(filename);
+    file << "Container,DataSize,InsertTime(ms),DeleteTime(ms),AccessTime(ms)\n";
+    for (const auto& result : results) {
+        file << result.container << "," << result.dataSize << "," << result.insertTime << "," << result.deleteTime << "," << result.accessTime << "\n";
+    }
+}
+
+unsigned fnv_hash_1a_32(void *key, int len) {
+    unsigned char *p = static_cast<unsigned char*>(key);
+    unsigned h = 0x811c9dc5;
+    for (int i = 0; i < len; i++) {
+        h = (h ^ p[i]) * 0x01000193;
+    }
+    return h;
+}
+
+struct CustomHash {
+    size_t operator()(const string& key) const {
+        return fnv_hash_1a_32((void*)key.data(), key.size());
+    }
+};
+
 int main() {
     cout<<"Reading data from file"<<endl;
     vector<pair<string, int>> data = readCSV("../data/data.csv");
     cout<<"Data read successfully"<<endl;
-    vector<size_t> scales = {500, 20000, 500000, 10000000};
+    // vector<size_t> scales = {500, 20000, 500000, 10000000};
+    vector<size_t> scales(50);
+    generate(scales.begin(), scales.end(), [n = 0] () mutable { return n += 10000*(1+n/200000); });
     vector<BenchmarkResult> results;
 
     for (size_t scale : scales) {
@@ -86,10 +111,12 @@ int main() {
             continue;
         }
         cout << "Benchmarking with scale " << scale  << "..." << endl;
-        results.push_back(benchmark<unordered_map<string, int>>(data, scale, "unordered_map"));
         results.push_back(benchmark<map<string, int>>(data, scale, "map"));
+        results.push_back(benchmark<unordered_map<string, int>>(data, scale, "unordered_map"));
+        results.push_back(benchmark<unordered_map<string, int, CustomHash>>(data, scale, "unordered_map_fnv1a"));
     }
 
+    saveResultsToCSV(results, "../data/results/benchmark1_results.csv");
     printResults(results);
     return 0;
 }
