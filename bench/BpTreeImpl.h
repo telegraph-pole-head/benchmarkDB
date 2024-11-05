@@ -1,6 +1,7 @@
-#ifndef PROJECT_DB_BPTREE_TPP
-#define PROJECT_DB_BPTREE_TPP
+#ifndef PROJECT_DB_BPTREEIMPL_H
+#define PROJECT_DB_BPTREEIMPL_H
 
+#pragma once
 #include "BpTree.h"
 
 #include <algorithm>
@@ -13,114 +14,123 @@
 
 // Find the leaf node for index
 template <typename IndexType, typename DataType>
-typename BpTree<IndexType, DataType>::Node *
+typename BpTree<IndexType, DataType>::NodePtr
 BpTree<IndexType, DataType>::findLeafNode(const IndexType &index) {
-  Node *current = root.get();
-  while (!current->isLeaf) {
-    auto &children = current->ptrChildrenOrData.children;
+  if (root->isLeaf)
+    return root;
+  Node *current = root.get(); // get the raw pointer for faster traversal
+  while (true) {
+    auto &children = current->getChildren();
     auto it = std::lower_bound(current->indexes.begin(), current->indexes.end(),
                                index); // binary search to find the first
                                        // element greater than index
-    auto idxChild = std::distance(current->indexes.begin(), it);
+    size_t idxChild = (size_t)std::distance(current->indexes.begin(), it);
     // set the current node to the last element less than index
-    current = children[(size_t)idxChild].get();
+    if (children[idxChild]->isLeaf) {
+      return children[idxChild];
+    } else {
+      current = children[idxChild].get();
+    }
   }
-  return current;
 }
 
 // Find the parent of a node
 template <typename IndexType, typename DataType>
-typename BpTree<IndexType, DataType>::Node *
-BpTree<IndexType, DataType>::findParent(Node *child) {
-  if (child == root.get())
+typename BpTree<IndexType, DataType>::NodePtr
+BpTree<IndexType, DataType>::findParent(NodePtr &child) {
+  if (child.get() == root.get())
     return nullptr;
-  Node *current = root.get();
-  Node *parent = nullptr;
-  while (current != child) {
+
+  NodePtr parent = root;
+  NodePtr current = root;
+  while (!current->isLeaf) {
     parent = current;
     auto it = std::lower_bound(current->indexes.begin(), current->indexes.end(),
-                               child->indexes.back());
-    auto idx = std::distance(current->indexes.begin(), it);
-    current = current->ptrChildrenOrData.children[(size_t)idx].get();
+                               child->indexes.front());
+    size_t idxChild = (size_t)std::distance(current->indexes.begin(), it);
+    auto &closestChild = current->getChildren()[idxChild];
+    if (closestChild.get() == child.get())
+      return parent;
+    current = closestChild;
   }
-  return parent;
+  return parent; // return the supposed parent if child is not found
 }
 
 // Get the leftmost leaf node
 template <typename IndexType, typename DataType>
-typename BpTree<IndexType, DataType>::Node *
+typename BpTree<IndexType, DataType>::NodePtr
 BpTree<IndexType, DataType>::getLeftmostLeaf() {
+  if (root->isLeaf)
+    return root;
   Node *current = root.get();
-  while (!current->isLeaf) {
-    current = current->ptrChildrenOrData.children[0].get();
+  while (true) {
+    current = current->getChildren().front().get();
+    if (current->isLeaf)
+      return current->getShared();
   }
-  return current;
 }
 
 // Remove the index and data from the node
 template <typename IndexType, typename DataType>
-void BpTree<IndexType, DataType>::removeFromNode(Node *node, size_t pos) {
+void BpTree<IndexType, DataType>::removeFromNode(NodePtr node, size_t pos) {
   node->indexes.erase(node->indexes.begin() + (long)pos);
   if (node->isLeaf) {
-    node->ptrChildrenOrData.data.erase(node->ptrChildrenOrData.data.begin() +
-                                       (long)pos);
+    node->getData().erase(node->getData().begin() + (long)pos);
   } else {
-    node->ptrChildrenOrData.children.erase(
-        node->ptrChildrenOrData.children.begin() + (long)pos + 1);
+    node->getChildren().erase(node->getChildren().begin() + (long)pos + 1);
   }
 }
 
 // Split the leaf node
 template <typename IndexType, typename DataType>
 void BpTree<IndexType, DataType>::splitLeafNode(
-    Node *leaf, const IndexType &index, std::unique_ptr<DataType> data) {
-  NodePtr newLeaf = std::make_unique<Node>(true); // create a new leaf node
+    NodePtr leaf, const IndexType &index, std::unique_ptr<DataType> data) {
+  NodePtr newLeaf = Node::createLeaf(); // create a new leaf node
   auto splitPoint = static_cast<long>(leaf->indexes.size() / 2);
   newLeaf->indexes.assign(leaf->indexes.begin() + splitPoint,
                           leaf->indexes.end());
-  newLeaf->ptrChildrenOrData.data.assign(
-      std::make_move_iterator(leaf->ptrChildrenOrData.data.begin() +
-                              splitPoint),
-      std::make_move_iterator(leaf->ptrChildrenOrData.data.end()));
+  newLeaf->getData().assign(
+      std::make_move_iterator(leaf->getData().begin() + splitPoint),
+      std::make_move_iterator(leaf->getData().end()));
 
   // resize the original leaf
   leaf->indexes.resize((size_t)splitPoint);
-  leaf->ptrChildrenOrData.data.resize((size_t)splitPoint);
+  leaf->getData().resize((size_t)splitPoint);
 
   // update the next pointer
-  newLeaf->next = std::move(leaf->next);
-  leaf->next = std::move(newLeaf);
+  newLeaf->next = leaf->next;
+  leaf->next = newLeaf;
 
   // Promote the smallest index of the new leaf to the parent
-  promoteToParent(leaf, newLeaf->indexes.front(), std::move(newLeaf));
+  promoteToParent(leaf, newLeaf->indexes.front(), newLeaf);
 }
 
 // Promote the child to parent
 template <typename IndexType, typename DataType>
-void BpTree<IndexType, DataType>::promoteToParent(Node *left,
+void BpTree<IndexType, DataType>::promoteToParent(NodePtr left,
                                                   const IndexType &index,
                                                   NodePtr right) {
-  if (left == root.get()) {
-    NodePtr newRoot = std::make_unique<Node>(false);
+  if (left.get() == root.get()) {
+    NodePtr newRoot = Node::createInternal();
     // set the indexes and children
     newRoot->indexes.emplace_back(index);
-    newRoot->ptrChildrenOrData.children.emplace_back(std::move(left));
-    newRoot->ptrChildrenOrData.children.emplace_back(std::move(right));
+    newRoot->getChildren().emplace_back(std::move(left));
+    newRoot->getChildren().emplace_back(std::move(right));
     // when internal node is generated, it has 1 index and 2 children
     // so num_children = num_indexes + 1
     root = std::move(newRoot);
     return;
   }
 
-  Node *parent = findParent(left);
+  NodePtr parent = findParent(left);
 
   // insert the index and the right child
   auto it =
       std::lower_bound(parent->indexes.begin(), parent->indexes.end(), index);
   auto idx = std::distance(parent->indexes.begin(), it);
   parent->indexes.insert(it, index);
-  auto idxChild = parent->ptrChildrenOrData.children.begin() + idx + 1;
-  parent->ptrChildrenOrData.children.insert(idxChild, std::move(right));
+  auto itChild = parent->getChildren().begin() + idx + 1;
+  parent->getChildren().insert(itChild, std::move(right));
 
   // check if the parent is overflowing
   if (parent->indexes.size() >= maxIntChildren) {
@@ -130,9 +140,9 @@ void BpTree<IndexType, DataType>::promoteToParent(Node *left,
 
 // Split the internal node
 template <typename IndexType, typename DataType>
-void BpTree<IndexType, DataType>::splitInternalNode(Node *internal) {
+void BpTree<IndexType, DataType>::splitInternalNode(NodePtr internal) {
   // create a new internal node
-  NodePtr newInternal = std::make_unique<Node>(false);
+  NodePtr newInternal = Node::createInternal();
   // calculate the split point
   auto splitPoint =
       static_cast<typename std::vector<IndexType>::difference_type>(
@@ -141,17 +151,16 @@ void BpTree<IndexType, DataType>::splitInternalNode(Node *internal) {
   // move half of the indexes and children to the new internal node
   newInternal->indexes.assign(internal->indexes.begin() + splitPoint + 1,
                               internal->indexes.end());
-  newInternal->ptrChildrenOrData.children.assign(
-      std::make_move_iterator(internal->ptrChildrenOrData.children.begin() +
-                              splitPoint + 1),
-      std::make_move_iterator(internal->ptrChildrenOrData.children.end()));
+  newInternal->getChildren().assign(
+      std::make_move_iterator(internal->getChildren().begin() + splitPoint + 1),
+      std::make_move_iterator(internal->getChildren().end()));
 
   // get the middle index to be promoted
   IndexType promotedIndex = internal->indexes[(size_t)splitPoint];
 
   // resize the original internal
   internal->indexes.resize((size_t)splitPoint);
-  internal->ptrChildrenOrData.children.resize((size_t)splitPoint + 1);
+  internal->getChildren().resize((size_t)splitPoint + 1);
 
   // Promote the child to parent
   promoteToParent(internal, promotedIndex, std::move(newInternal));
@@ -159,29 +168,27 @@ void BpTree<IndexType, DataType>::splitInternalNode(Node *internal) {
 
 // Rebalance the tree
 template <typename IndexType, typename DataType>
-void BpTree<IndexType, DataType>::rebalance(Node *node) {
+void BpTree<IndexType, DataType>::rebalance(NodePtr node) {
   // check if the leaf node is underflowing
   size_t minSize = maxLeafIdxes / 2;
   if (node->indexes.size() >= minSize)
     return;
   // handle underflow
   // handle level decrease triggered by underflow
-  if (node == root.get()) {
+  if (node == root) {
     if (!node->isLeaf && node->indexes.empty()) {
-      root = std::move(node->ptrChildrenOrData.children[0]);
+      root = std::move(node->getChildren()[0]);
     }
     return;
   }
   // get the parent, left and right siblings
-  Node *parent = findParent(node);
+  NodePtr parent = findParent(node);
   auto it = std::lower_bound(parent->indexes.begin(), parent->indexes.end(),
                              node->indexes.back());
   size_t idx = (size_t)std::distance(parent->indexes.begin(), it);
-  Node *leftSibling =
-      (idx > 0) ? parent->ptrChildrenOrData.children[idx - 1].get() : nullptr;
-  Node *rightSibling = (idx < parent->indexes.size())
-                           ? parent->ptrChildrenOrData.children[idx + 1].get()
-                           : nullptr;
+  NodePtr leftSibling = (idx > 0) ? parent->getChildren()[idx - 1] : nullptr;
+  NodePtr rightSibling =
+      (idx < parent->indexes.size()) ? parent->getChildren()[idx + 1] : nullptr;
   if (leftSibling && leftSibling->indexes.size() > minSize) {
     borrowFromLeft(node, leftSibling, parent, idx - 1);
   } else if (rightSibling && rightSibling->indexes.size() > minSize) {
@@ -197,24 +204,23 @@ void BpTree<IndexType, DataType>::rebalance(Node *node) {
 
 // Borrow a node from the left sibling
 template <typename IndexType, typename DataType>
-void BpTree<IndexType, DataType>::borrowFromLeft(Node *node, Node *leftSibling,
-                                                 Node *parent, size_t idx) {
+void BpTree<IndexType, DataType>::borrowFromLeft(NodePtr node,
+                                                 NodePtr leftSibling,
+                                                 NodePtr parent, size_t idx) {
   if (node->isLeaf) {
     node->indexes.insert(node->indexes.begin(), leftSibling->indexes.back());
-    node->ptrChildrenOrData.data.insert(
-        node->ptrChildrenOrData.data.begin(),
-        std::move(leftSibling->ptrChildrenOrData.data.back()));
+    node->getData().insert(node->getData().begin(),
+                           std::move(leftSibling->getData().back()));
     leftSibling->indexes.pop_back();
-    leftSibling->ptrChildrenOrData.data.pop_back();
+    leftSibling->getData().pop_back();
     // update the parent index
     parent->indexes[idx] = node->indexes.front();
   } else {
     node->indexes.insert(node->indexes.begin(), parent->indexes[idx]);
-    node->ptrChildrenOrData.children.insert(
-        node->ptrChildrenOrData.children.begin(),
-        std::move(leftSibling->ptrChildrenOrData.children.back()));
+    node->getChildren().insert(node->getChildren().begin(),
+                               std::move(leftSibling->getChildren().back()));
     leftSibling->indexes.pop_back();
-    leftSibling->ptrChildrenOrData.children.pop_back();
+    leftSibling->getChildren().pop_back();
     // update the parent index
     parent->indexes[idx] = leftSibling->indexes.back();
   }
@@ -222,40 +228,36 @@ void BpTree<IndexType, DataType>::borrowFromLeft(Node *node, Node *leftSibling,
 
 // Borrow a node from the right sibling
 template <typename IndexType, typename DataType>
-void BpTree<IndexType, DataType>::borrowFromRight(Node *node,
-                                                  Node *rightSibling,
-                                                  Node *parent, size_t idx) {
+void BpTree<IndexType, DataType>::borrowFromRight(NodePtr node,
+                                                  NodePtr rightSibling,
+                                                  NodePtr parent, size_t idx) {
   if (node->isLeaf) {
     node->indexes.emplace_back(rightSibling->indexes.front());
-    node->ptrChildrenOrData.data.emplace_back(
-        std::move(rightSibling->ptrChildrenOrData.data.front()));
+    node->getData().emplace_back(std::move(rightSibling->getData().front()));
     rightSibling->indexes.erase(rightSibling->indexes.begin());
-    rightSibling->ptrChildrenOrData.data.erase(
-        rightSibling->ptrChildrenOrData.data.begin());
+    rightSibling->getData().erase(rightSibling->getData().begin());
     parent->indexes[idx] = rightSibling->indexes.front();
   } else {
     node->indexes.emplace_back(parent->indexes[idx]);
-    node->ptrChildrenOrData.children.emplace_back(
-        std::move(rightSibling->ptrChildrenOrData.children.front()));
+    node->getChildren().emplace_back(
+        std::move(rightSibling->getChildren().front()));
     rightSibling->indexes.erase(rightSibling->indexes.begin());
-    rightSibling->ptrChildrenOrData.children.erase(
-        rightSibling->ptrChildrenOrData.children.begin());
+    rightSibling->getChildren().erase(rightSibling->getChildren().begin());
     parent->indexes[idx] = rightSibling->indexes.front();
   }
 }
 
 // Merge the sibling nodes
 template <typename IndexType, typename DataType>
-void BpTree<IndexType, DataType>::mergeNodes(Node *left, Node *right,
-                                             Node *parent, size_t idx) {
+void BpTree<IndexType, DataType>::mergeNodes(NodePtr left, NodePtr right,
+                                             NodePtr parent, size_t idx) {
   if (left->isLeaf) {
     // merge the indexes and data
     left->indexes.insert(left->indexes.end(), right->indexes.begin(),
                          right->indexes.end());
-    left->ptrChildrenOrData.data.insert(
-        left->ptrChildrenOrData.data.end(),
-        std::make_move_iterator(right->ptrChildrenOrData.data.begin()),
-        std::make_move_iterator(right->ptrChildrenOrData.data.end()));
+    left->getData().insert(left->getData().end(),
+                           std::make_move_iterator(right->getData().begin()),
+                           std::make_move_iterator(right->getData().end()));
     // update the next pointer
     left->next = std::move(right->next);
   } else {
@@ -263,10 +265,10 @@ void BpTree<IndexType, DataType>::mergeNodes(Node *left, Node *right,
     left->indexes.emplace_back(parent->indexes[idx]);
     left->indexes.insert(left->indexes.end(), right->indexes.begin(),
                          right->indexes.end());
-    left->ptrChildrenOrData.children.insert(
-        left->ptrChildrenOrData.children.end(),
-        std::make_move_iterator(right->ptrChildrenOrData.children.begin()),
-        std::make_move_iterator(right->ptrChildrenOrData.children.end()));
+    left->getChildren().insert(
+        left->getChildren().end(),
+        std::make_move_iterator(right->getChildren().begin()),
+        std::make_move_iterator(right->getChildren().end()));
   }
   removeFromNode(parent, idx);
 }
@@ -275,46 +277,23 @@ void BpTree<IndexType, DataType>::mergeNodes(Node *left, Node *right,
 template <typename IndexType, typename DataType>
 bool BpTree<IndexType, DataType>::insert(const IndexType &index,
                                          const DataType &data) {
-  std::cout
-      << "\n------------------------------------------------------------\n";
-  std::cout << "Starting insert: index = " << index << ", data = " << data
-            << std::endl;
+  std::cout << "Inserting " << index << " with data " << data << std::endl;
 
   // find the leaf node containing the index
-  Node *leaf = findLeafNode(index);
-
-  // std::cout << "Inserting into leaf node\n";
+  NodePtr leaf = findLeafNode(index)->getShared();
 
   bool isOverflow = (leaf->indexes.size() >= maxLeafIdxes);
 
   auto it = std::lower_bound(leaf->indexes.begin(), leaf->indexes.end(), index);
-  auto diff = std::distance(leaf->indexes.begin(), it);
-  std::cout << "Index is at position " << diff << std::endl;
-  std::cout << "Indexes in the leaf node: ";
-  for (auto i : leaf->indexes) {
-    std::cout << i << " ";
-  }
-  std::cout << std::endl;
   if (it != leaf->indexes.end() && *it == index) {
     return false; // duplicate index
   }
-
-  if (isOverflow) {
-    std::cout << "Leaf node is overflowing\n";
-  } else {
-    std::cout << "Leaf node is not overflowing\n";
-  }
-
-  auto idx = std::distance(leaf->indexes.begin(), it);
   // insert the index and data (even if overflow, since we'll split later)
+  auto idx = std::distance(leaf->indexes.begin(), it);
   leaf->indexes.insert(it, index);
-  // auto idx_data = leaf->ptrChildrenOrData.data.begin() + idx;
-  std::cout << "Inserting data into the " << idx << "th position\n";
-  // get the pointer to the data
   auto ptr = std::make_unique<DataType>(data);
-  auto it_data = leaf->ptrChildrenOrData.data.begin() + idx;
-
-  leaf->ptrChildrenOrData.data.insert(it_data, std::move(ptr));
+  auto it_data = leaf->getData().begin() + idx;
+  leaf->getData().insert(it_data, std::move(ptr));
 
   if (isOverflow)
     splitLeafNode(leaf, index, std::make_unique<DataType>(data));
@@ -328,7 +307,7 @@ bool BpTree<IndexType, DataType>::remove(const IndexType &index) {
   if (!root)
     return false;
   // find the leaf node containing the index
-  Node *leaf = findLeafNode(index);
+  NodePtr leaf = findLeafNode(index);
   auto it = std::lower_bound(leaf->indexes.begin(), leaf->indexes.end(), index);
   if (it == leaf->indexes.end() || *it != index) {
     return false; // Index not found
@@ -336,8 +315,8 @@ bool BpTree<IndexType, DataType>::remove(const IndexType &index) {
   // remove the index and data
   auto idx = std::distance(leaf->indexes.begin(), it);
   removeFromNode(leaf, (size_t)idx);
-  if ((leaf == root.get()) && (leaf->indexes.empty())) {
-    root = std::make_unique<Node>(true);
+  if ((leaf == root) && (leaf->indexes.empty())) {
+    root = std::make_shared<Node>(true);
     return true;
   }
   // rebalance the tree after deletion
@@ -350,13 +329,12 @@ template <typename IndexType, typename DataType>
 std::unique_ptr<DataType>
 BpTree<IndexType, DataType>::search(const IndexType &index) {
   // find the leaf node containing the index
-  std::unique_ptr<Node> leaf = std::make_unique<Node>(findLeafNode(index));
+  NodePtr leaf = findLeafNode(index);
   // find the index in the leaf node
   auto it = std::lower_bound(leaf->indexes.begin(), leaf->indexes.end(), index);
   if (it != leaf->indexes.end() && *it == index) {
     auto idx = std::distance(leaf->indexes.begin(), it);
-    return std::make_unique<DataType>(
-        *leaf->ptrChildrenOrData.data[(size_t)idx]);
+    return std::make_unique<DataType>(*leaf->getData()[(size_t)idx]);
   }
   return nullptr;
 }
@@ -366,7 +344,7 @@ template <typename IndexType, typename DataType>
 std::unique_ptr<IndexType> BpTree<IndexType, DataType>::getMin() {
   if (!root)
     return nullptr;
-  Node *current = getLeftmostLeaf();
+  NodePtr current = getLeftmostLeaf();
   return std::make_unique<IndexType>(current->indexes.front());
 }
 
@@ -375,9 +353,9 @@ template <typename IndexType, typename DataType>
 std::unique_ptr<IndexType> BpTree<IndexType, DataType>::getMax() {
   if (!root)
     return nullptr;
-  Node *current = root.get();
+  NodePtr current = root;
   while (!current->isLeaf) {
-    current = current->ptrChildrenOrData.children.back().get();
+    current = current->getChildren().back();
   }
   return std::make_unique<IndexType>(current->indexes.back());
 }
@@ -389,7 +367,7 @@ std::vector<std::unique_ptr<DataType>> BpTree<IndexType, DataType>::rangeQuery(
     const std::optional<IndexType> &maxIndex) {
   std::vector<std::unique_ptr<DataType>> result;
   // Start from the leaf node containing minIndex or the leftmost leaf
-  Node *current = minIndex ? findLeafNode(*minIndex) : getLeftmostLeaf();
+  NodePtr current = minIndex ? findLeafNode(*minIndex) : getLeftmostLeaf();
   while (current) {
     size_t i = 0;
     // If minIndex is specified, find the starting point
@@ -402,11 +380,10 @@ std::vector<std::unique_ptr<DataType>> BpTree<IndexType, DataType>::rangeQuery(
     for (; i < current->indexes.size(); ++i) {
       if (maxIndex && current->indexes[i] > *maxIndex)
         return result;
-      result.emplace_back(
-          std::make_unique<DataType>(*current->ptrChildrenOrData.data[i]));
+      result.emplace_back(std::make_unique<DataType>(*current->getData()[i]));
     }
     // Move to the next leaf node
-    current = current->next.get();
+    current = current->next;
   }
   return result;
 }
@@ -418,7 +395,7 @@ size_t BpTree<IndexType, DataType>::countRange(
     const std::optional<IndexType> &maxIndex) {
   size_t count = 0;
   // Start from the leaf node containing minIndex or the leftmost leaf
-  Node *current = minIndex ? findLeafNode(*minIndex) : getLeftmostLeaf();
+  NodePtr current = minIndex ? findLeafNode(*minIndex) : getLeftmostLeaf();
   while (current) {
     size_t i = 0;
     // If minIndex is specified, find the starting point
@@ -434,7 +411,7 @@ size_t BpTree<IndexType, DataType>::countRange(
       ++count;
     }
     // Move to the next leaf node
-    current = current->next.get();
+    current = current->next;
   }
   return count;
 }
@@ -444,9 +421,9 @@ template <typename IndexType, typename DataType>
 void BpTree<IndexType, DataType>::printTree() const {
   if (!root)
     return;
-  std::vector<Node *> currentLevel;
-  std::vector<Node *> nextLevel;
-  currentLevel.emplace_back(root.get());
+  std::vector<NodePtr> currentLevel;
+  std::vector<NodePtr> nextLevel;
+  currentLevel.emplace_back(root);
   while (!currentLevel.empty()) {
     for (auto node : currentLevel) {
       std::cout << "[";
@@ -457,8 +434,8 @@ void BpTree<IndexType, DataType>::printTree() const {
       }
       std::cout << "]";
       if (!node->isLeaf) {
-        for (size_t i = 0; i < node->ptrChildrenOrData.children.size(); ++i) {
-          nextLevel.emplace_back(node->ptrChildrenOrData.children[i].get());
+        for (size_t i = 0; i < node->getChildren().size(); ++i) {
+          nextLevel.emplace_back(node->getChildren()[i]);
         }
       }
     }

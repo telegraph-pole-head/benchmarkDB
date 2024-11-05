@@ -3,80 +3,89 @@
 
 #include <memory>
 #include <optional>
+#include <variant>
 #include <vector>
 
 template <typename IndexType, typename DataType> class BpTree {
 private:
-  struct Node {
+  class Node : public std::enable_shared_from_this<Node> {
+  public:
+    typedef std::vector<std::unique_ptr<DataType>>
+        DataContent; // For leaf nodes
+    typedef std::vector<std::shared_ptr<Node>>
+        ChildrenContent; // For internal nodes
+
     bool isLeaf; // True if node is a leaf, false if node is an internal node
     std::vector<IndexType> indexes; // the index of the node
-    std::unique_ptr<Node> next;     // the next leaf node
-    union ptrs {
-      std::vector<std::unique_ptr<Node>> children;
-      std::vector<std::unique_ptr<DataType>> data; // Only used in leaf nodes
-      ptrs() {}
-      ~ptrs() {}
-    } ptrChildrenOrData;
+    std::shared_ptr<Node> next;     // the next leaf node
+    std::variant<DataContent, ChildrenContent> content;
 
-    Node(bool isLeaf) : isLeaf(isLeaf) {
-      new (&indexes) std::vector<IndexType>();
-      next = nullptr;
+    Node(bool isLeaf) : isLeaf(isLeaf), indexes(), next(nullptr) {
       if (isLeaf) {
-        new (&ptrChildrenOrData.data) std::vector<std::unique_ptr<DataType>>();
+        content = DataContent();
       } else {
-        new (&ptrChildrenOrData.children) std::vector<std::unique_ptr<Node>>();
+        content = ChildrenContent();
       }
     }
-
-    ~Node() {
-      if (isLeaf) {
-        ptrChildrenOrData.data.~vector();
-      } else {
-        ptrChildrenOrData.children.~vector();
-      }
+    // create a new node
+    static std::shared_ptr<Node> createLeaf() {
+      return std::make_shared<Node>(true);
+    }
+    static std::shared_ptr<Node> createInternal() {
+      return std::make_shared<Node>(false);
+    }
+    // for shared pointer
+    std::shared_ptr<Node> getShared() { return this->shared_from_this(); }
+    // get the reference to the data or children
+    std::vector<std::unique_ptr<DataType>> &getData() {
+      return std::get<DataContent>(content);
+    }
+    std::vector<std::shared_ptr<Node>> &getChildren() {
+      return std::get<ChildrenContent>(content);
     }
   };
 
-  using NodePtr = std::unique_ptr<Node>;
+  using NodePtr = std::shared_ptr<Node>;
   NodePtr root;
   size_t maxIntChildren; // Limiting #of children for an internal Node
   size_t maxLeafIdxes;   // Limiting #of indexes for a leaf Node
 
   // Find the leaf node for index
-  Node *findLeafNode(const IndexType &index);
+  NodePtr findLeafNode(const IndexType &index);
   // Find parent of a node
-  Node *findParent(Node *child);
+  NodePtr findParent(NodePtr &child);
   // Get the leftmost leaf node
-  Node *getLeftmostLeaf();
+  NodePtr getLeftmostLeaf();
   // Remove the index and data/children from the node
-  void removeFromNode(Node *node, size_t pos);
+  void removeFromNode(NodePtr node, size_t pos);
   // Split the leaf node
-  void splitLeafNode(Node *leaf, const IndexType &index,
+  void splitLeafNode(NodePtr leaf, const IndexType &index,
                      std::unique_ptr<DataType> data);
   // Promote the child to parent
-  void promoteToParent(Node *left, const IndexType &index, NodePtr right);
+  void promoteToParent(NodePtr left, const IndexType &index, NodePtr right);
   // Split the internal node
-  void splitInternalNode(Node *internal);
+  void splitInternalNode(NodePtr internal);
   // Rebalance the tree
-  void rebalance(Node *node);
+  void rebalance(NodePtr node);
   // Borrow a node from the sibling
-  void borrowFromLeft(Node *node, Node *leftSibling, Node *parent, size_t idx);
-  void borrowFromRight(Node *node, Node *rightSibling, Node *parent,
+  void borrowFromLeft(NodePtr node, NodePtr leftSibling, NodePtr parent,
+                      size_t idx);
+  void borrowFromRight(NodePtr node, NodePtr rightSibling, NodePtr parent,
                        size_t idx);
   // Merge the nodes
-  void mergeNodes(Node *left, Node *right, Node *parent, size_t idx);
+  void mergeNodes(NodePtr left, NodePtr right, NodePtr parent, size_t idx);
 
 public:
   BpTree()
-      : root(std::make_unique<Node>(true)), maxIntChildren(8), maxLeafIdxes(7) {
+      : root(std::make_shared<Node>(true)), maxIntChildren(8), maxLeafIdxes(7) {
   }
 
   BpTree(size_t order)
-      : root(std::make_unique<Node>(true)), maxIntChildren(order),
+      : root(std::make_shared<Node>(true)), maxIntChildren(order),
         maxLeafIdxes(order - 1) {}
 
   BpTree(size_t maxIntChildren, size_t maxLeafIdxes)
-      : root(std::make_unique<Node>(true)), maxIntChildren(maxIntChildren),
+      : root(std::make_shared<Node>(true)), maxIntChildren(maxIntChildren),
         maxLeafIdxes(maxLeafIdxes) {}
 
   /**
@@ -162,6 +171,6 @@ public:
   void printTree() const;
 };
 
-#include "BpTree.tpp" // Include the implementation
+#include "BpTreeImpl.h" // Include the implementation
 
 #endif // PROJECT_DB_BPTREE_H

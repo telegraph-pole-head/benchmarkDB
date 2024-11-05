@@ -27,7 +27,7 @@ private:
     // assert(tree.insert(3, "three"));
     assert(!tree.insert(2, "one")); // Duplicate insert
     for (int i = 3; i < 20; ++i) {
-      assert(tree.insert(i, "data"));
+      assert(tree.insert(i, "d"));
       tree.printTree();
     }
     std::cout << "testInsert passed!" << std::endl;

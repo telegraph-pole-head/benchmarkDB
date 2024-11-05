@@ -1,5 +1,5 @@
-CXX = clang++
-CXXFLAGS = -std=c++17 -Wall -fsanitize=address
+CXX = g++
+CXXFLAGS = -std=c++17 -Wall -fsanitize=address -g -O0
 LDFLAGS = 
 
 # Source files
@@ -12,28 +12,35 @@ OBJS = $(SRCS:.cpp=.o)
 BENCH_EXEC = mainBench1
 TEST_EXEC = testBp
 
+# Directories
+BIN_DIR := bin
+
 # Default target
-all: $(BENCH_EXEC)
+all: $(BIN_DIR)/$(BENCH_EXEC) $(BIN_DIR)/$(TEST_EXEC)
+
+# Create bin directory if it doesn't exist
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)
 
 # Compile the benchmark executable
-$(BENCH_EXEC): BpTree.o mainBench1.o
+$(BIN_DIR)/$(BENCH_EXEC): BpTree.o mainBench1.o | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 # Compile the test executable
-$(TEST_EXEC): BpTree.o testBp.o
+$(BIN_DIR)/$(TEST_EXEC): BpTree.o testBp.o | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
+	rm -f $^
 
 # Compile source files to object files
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-
 # Clean up build artifacts
 clean:
-	rm -f $(OBJS) $(BENCH_EXEC) $(TEST_EXEC)
+	rm -f $(OBJS) $(BIN_DIR)/$(BENCH_EXEC) $(BIN_DIR)/$(TEST_EXEC)
 
 # Run tests
-test: $(TEST_EXEC)
-	./$(TEST_EXEC)
+test: $(BIN_DIR)/$(TEST_EXEC)
+	./$(BIN_DIR)/$(TEST_EXEC)
 
 .PHONY: all clean test
