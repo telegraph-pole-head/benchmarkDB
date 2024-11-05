@@ -109,7 +109,7 @@ public:
    * @return        true if the removal is successful
    * @return        false if the index is not found
    */
-  bool remove(const IndexType &index);
+  bool erase(const IndexType &index);
 
   /**
    * @brief         search for a specific index
@@ -173,6 +173,14 @@ public:
    * @tparam        DataType
    */
   void printTree() const;
+
+  /**
+   * @brief Overload the [] operator for insert, search, and update
+   *
+   * @param index The index to search for
+   * @return A reference to the DataType associated with the index
+   */
+  DataType& operator[](const IndexType& index);
 };
 
 #include "BpTreeImpl.h" // Include the implementation

@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "BpTree.h"
+
 using namespace std;
 using namespace std::chrono;
 
@@ -141,6 +143,7 @@ int main() {
         data, scale, "unordered_map_fnv1a"));
     results.push_back(benchmark<unordered_map<string, int, CustomHashMod>>(
         data, scale, "unordered_map_mod"));
+    results.push_back(benchmark<BpTree<string, int>>(data, scale, "B+Tree"));
   }
 
   saveResultsToCSV(results, "../data/results/benchmark1_results.csv");

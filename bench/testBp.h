@@ -22,7 +22,7 @@ private:
   static void testInsert() {
     std::cout << "Starting testInsert" << std::endl;
     BpTree<int, std::string> tree(3);
-    assert(tree.insert(1, "one"));
+    tree[1] = "one";
     assert(tree.insert(2, "two"));
     // assert(tree.insert(3, "three"));
     assert(!tree.insert(2, "one")); // Duplicate insert
@@ -38,14 +38,14 @@ private:
     for (int i = 1; i < 20; ++i) {
       assert(tree.insert(i, "d"));
     }
-    assert(tree.remove(5));
-    assert(!tree.remove(5)); // Remove non-existent
+    assert(tree.erase(5));
+    assert(!tree.erase(5)); // Remove non-existent
     tree.printTree();
-    assert(tree.remove(16)); // test borrow
+    assert(tree.erase(16)); // test borrow
     tree.printTree();
     for (int i = 1; i < 20; ++i) {
       if (i != 5 && i != 16) {
-        assert(tree.remove(i));
+        assert(tree.erase(i));
         tree.printTree();
       }
     }
@@ -61,8 +61,8 @@ private:
     assert(dataIn5 != nullptr);
     // update the data
     *dataIn5 = "five";
-    assert(*tree.search(5) == "five");
-    assert(tree.remove(11));
+    assert(tree[5] == "five");
+    assert(tree.erase(11));
     assert(tree.search(11) == nullptr); // Search non-existent
     std::cout << "testSearch passed!" << std::endl;
   }

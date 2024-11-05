@@ -305,7 +305,7 @@ bool BpTree<IndexType, DataType>::insert(const IndexType &index,
 
 // Remove a node with index from the B+ tree
 template <typename IndexType, typename DataType>
-bool BpTree<IndexType, DataType>::remove(const IndexType &index) {
+bool BpTree<IndexType, DataType>::erase(const IndexType &index) {
   if (!root)
     return false;
   // find the leaf node containing the index
@@ -456,6 +456,23 @@ void BpTree<IndexType, DataType>::printTree() const {
     std::cout << std::endl;
     currentLevel = nextLevel;
     nextLevel.clear();
+  }
+}
+
+template <typename IndexType, typename DataType>
+DataType& BpTree<IndexType, DataType>::operator[](const IndexType& index) {
+  auto existingData = search(index);
+  if (existingData) {
+    // If the index exists, return a reference to the existing data
+    return *existingData;
+  } else {
+    // If the index doesn't exist, insert a new element with default-constructed data
+    DataType newData{};
+    insert(index, newData);
+    
+    // Search again to get the pointer to the newly inserted data
+    auto insertedData = search(index);
+    return *insertedData;
   }
 }
 
