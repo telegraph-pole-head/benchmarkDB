@@ -10,7 +10,7 @@ template <typename IndexType, typename DataType> class BpTree {
 private:
   class Node : public std::enable_shared_from_this<Node> {
   public:
-    typedef std::vector<std::unique_ptr<DataType>>
+    typedef std::vector<std::shared_ptr<DataType>>
         DataContent; // For leaf nodes
     typedef std::vector<std::shared_ptr<Node>>
         ChildrenContent; // For internal nodes
@@ -37,7 +37,7 @@ private:
     // for shared pointer
     std::shared_ptr<Node> getShared() { return this->shared_from_this(); }
     // get the reference to the data or children
-    std::vector<std::unique_ptr<DataType>> &getData() {
+    std::vector<std::shared_ptr<DataType>> &getData() {
       return std::get<DataContent>(content);
     }
     std::vector<std::shared_ptr<Node>> &getChildren() {
@@ -51,22 +51,22 @@ private:
   size_t maxLeafIdxes;   // Limiting #of indexes for a leaf Node
 
   // Find the leaf node for index
-  NodePtr findLeafNode(const IndexType &index);
+  NodePtr findLeafNode(const IndexType &index) const;
   // Find parent of a node
-  NodePtr findParent(NodePtr &child);
+  NodePtr findParent(NodePtr &child) const;
   // Get the leftmost leaf node
-  NodePtr getLeftmostLeaf();
+  NodePtr getLeftmostLeaf() const;
   // Remove the index and data/children from the node
   void removeFromNode(NodePtr node, size_t pos);
   // Split the leaf node
   void splitLeafNode(NodePtr leaf, const IndexType &index,
-                     std::unique_ptr<DataType> data);
+                     std::shared_ptr<DataType> data);
   // Promote the child to parent
   void promoteToParent(NodePtr left, const IndexType &index, NodePtr right);
   // Split the internal node
   void splitInternalNode(NodePtr internal);
   // Rebalance the tree
-  void rebalance(NodePtr node);
+  void delRebalance(NodePtr node, size_t idx);
   // Borrow a node from the sibling
   void borrowFromLeft(NodePtr node, NodePtr leftSibling, NodePtr parent,
                       size_t idx);
@@ -117,27 +117,27 @@ public:
    * @tparam        IndexType
    * @tparam        DataType
    * @param         index
-   * @return        std::unique_ptr<DataType>, nullptr if not found
+   * @return        std::shared_ptr<DataType>, nullptr if not found
    */
-  std::unique_ptr<DataType> search(const IndexType &index);
+  std::shared_ptr<DataType> search(const IndexType &index);
 
   /**
    * @brief         Get the minimum index in the B+ tree
    *
    * @tparam        IndexType
    * @tparam        DataType
-   * @return        std::unique_ptr<IndexType>
+   * @return        IndexType
    */
-  std::unique_ptr<IndexType> getMin();
+  IndexType getMin() const;
 
   /**
    * @brief         Get the maximum index in the B+ tree
    *
    * @tparam        IndexType
    * @tparam        DataType
-   * @return        std::unique_ptr<IndexType>
+   * @return        IndexType
    */
-  std::unique_ptr<IndexType> getMax();
+  IndexType getMax() const;
 
   /**
    * @brief         Range query in the B+ tree
@@ -146,11 +146,13 @@ public:
    * @tparam        DataType
    * @param         minIndex , if input is std::nullopt, start from the leftmost
    * @param         maxIndex , if input is std::nullopt, end at the rightmost
-   * @return        std::vector<std::unique_ptr<DataType>>
+   * @return        std::vector<std::shared_ptr<DataType>>
    */
-  std::vector<std::unique_ptr<DataType>>
+  std::vector<std::shared_ptr<DataType>>
   rangeQuery(const std::optional<IndexType> &minIndex,
-             const std::optional<IndexType> &maxIndex);
+             const std::optional<IndexType> &maxIndex,
+             const bool &leftInclusive = true,
+             const bool &rightInclusive = true);
 
   /**
    * @brief         Count the number of indexes in the range
@@ -160,7 +162,9 @@ public:
    * @return        size_t
    */
   size_t countRange(const std::optional<IndexType> &minIndex,
-                    const std::optional<IndexType> &maxIndex);
+                    const std::optional<IndexType> &maxIndex,
+                    const bool &leftInclusive = true,
+                    const bool &rightInclusive = true);
 
   /**
    * @brief         Print the B+ tree
