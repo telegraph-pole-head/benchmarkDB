@@ -136,13 +136,13 @@ int main() {
       continue;
     }
     cout << "Benchmarking with scale " << scale << "..." << endl;
-    results.push_back(benchmark<map<string, int>>(data, scale, "map"));
     results.push_back(
         benchmark<unordered_map<string, int>>(data, scale, "unordered_map"));
     results.push_back(benchmark<unordered_map<string, int, CustomHashFNV1A>>(
         data, scale, "unordered_map_fnv1a"));
     results.push_back(benchmark<unordered_map<string, int, CustomHashMod>>(
         data, scale, "unordered_map_mod"));
+    results.push_back(benchmark<map<string, int>>(data, scale, "map"));
     results.push_back(benchmark<BpTree<string, int>>(data, scale, "B+Tree"));
   }
 

@@ -77,8 +77,8 @@ private:
 
 public:
   BpTree()
-      : root(std::make_shared<Node>(true)), maxIntChildren(8), maxLeafIdxes(7) {
-  }
+      : root(std::make_shared<Node>(true)), maxIntChildren(17),
+        maxLeafIdxes(16) {}
 
   BpTree(size_t order)
       : root(std::make_shared<Node>(true)), maxIntChildren(order),

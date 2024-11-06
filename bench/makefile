@@ -1,6 +1,6 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -fsanitize=address -g -O0
-LDFLAGS = 
+CXXFLAGS = -std=c++17 -Wall -O3 -flto
+LDFLAGS = -flto
 
 # Source files
 SRCS = BpTree.cpp mainBench1.cpp testBp.cpp
