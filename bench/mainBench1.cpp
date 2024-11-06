@@ -60,7 +60,7 @@ BenchmarkResult benchmark(const vector<pair<string, int>> &data,
 
   // Delete
   start = high_resolution_clock::now();
-  for (size_t i = 0; i < dataSize; ++i) {
+  for (size_t i = 0; i < dataSize; i++) {
     map.erase(data[i].first);
   }
   end = high_resolution_clock::now();

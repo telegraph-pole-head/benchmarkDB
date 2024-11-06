@@ -180,7 +180,7 @@ public:
    * @param index The index to search for
    * @return A reference to the DataType associated with the index
    */
-  DataType& operator[](const IndexType& index);
+  DataType &operator[](const IndexType &index);
 };
 
 #include "BpTreeImpl.h" // Include the implementation

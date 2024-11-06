@@ -25,6 +25,7 @@ $(BIN_DIR):
 # Compile the benchmark executable
 $(BIN_DIR)/$(BENCH_EXEC): BpTree.o mainBench1.o | $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $^
+	rm -f mainBench1.o
 
 # Compile the test executable
 $(BIN_DIR)/$(TEST_EXEC): BpTree.o testBp.o | $(BIN_DIR)

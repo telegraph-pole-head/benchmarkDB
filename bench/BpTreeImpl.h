@@ -186,7 +186,7 @@ void BpTree<IndexType, DataType>::delRebalance(NodePtr node, size_t idx) {
   }
   // get the parent, left and right siblings
   NodePtr parent = findParent(node);
-  auto it = std::lower_bound(parent->indexes.begin(), parent->indexes.end(),
+  auto it = std::upper_bound(parent->indexes.begin(), parent->indexes.end(),
                              node->indexes.back());
   removeFromNode(node, idx);
   size_t idxParent = (size_t)std::distance(parent->indexes.begin(), it);
@@ -223,10 +223,10 @@ void BpTree<IndexType, DataType>::borrowFromLeft(NodePtr node,
     node->indexes.insert(node->indexes.begin(), parent->indexes[idx]);
     node->getChildren().insert(node->getChildren().begin(),
                                std::move(leftSibling->getChildren().back()));
-    leftSibling->indexes.pop_back();
-    leftSibling->getChildren().pop_back();
     // update the parent index
     parent->indexes[idx] = leftSibling->indexes.back();
+    leftSibling->indexes.pop_back();
+    leftSibling->getChildren().pop_back();
   }
 }
 
@@ -245,9 +245,9 @@ void BpTree<IndexType, DataType>::borrowFromRight(NodePtr node,
     node->indexes.emplace_back(parent->indexes[idx]);
     node->getChildren().emplace_back(
         std::move(rightSibling->getChildren().front()));
+    parent->indexes[idx] = rightSibling->indexes.front();
     rightSibling->indexes.erase(rightSibling->indexes.begin());
     rightSibling->getChildren().erase(rightSibling->getChildren().begin());
-    parent->indexes[idx] = rightSibling->indexes.front();
   }
 }
 
@@ -282,7 +282,7 @@ template <typename IndexType, typename DataType>
 bool BpTree<IndexType, DataType>::insert(const IndexType &index,
                                          const DataType &data) {
   // find the leaf node containing the index
-  NodePtr leaf = findLeafNode(index)->getShared();
+  NodePtr leaf = findLeafNode(index);
 
   bool isOverflow = (leaf->indexes.size() >= maxLeafIdxes);
 
@@ -380,7 +380,6 @@ std::vector<std::shared_ptr<DataType>> BpTree<IndexType, DataType>::rangeQuery(
     // Iterate through the leaf node
     for (; i < current->indexes.size(); ++i) {
       // Check if current index is within the maxIndex and rightInclusive
-      // condition
       if (maxIndex) {
         if ((rightInclusive && current->indexes[i] > *maxIndex) ||
             (!rightInclusive && current->indexes[i] >= *maxIndex))
@@ -460,16 +459,17 @@ void BpTree<IndexType, DataType>::printTree() const {
 }
 
 template <typename IndexType, typename DataType>
-DataType& BpTree<IndexType, DataType>::operator[](const IndexType& index) {
+DataType &BpTree<IndexType, DataType>::operator[](const IndexType &index) {
   auto existingData = search(index);
   if (existingData) {
     // If the index exists, return a reference to the existing data
     return *existingData;
   } else {
-    // If the index doesn't exist, insert a new element with default-constructed data
+    // If the index doesn't exist, insert a new element with default-constructed
+    // data
     DataType newData{};
     insert(index, newData);
-    
+
     // Search again to get the pointer to the newly inserted data
     auto insertedData = search(index);
     return *insertedData;

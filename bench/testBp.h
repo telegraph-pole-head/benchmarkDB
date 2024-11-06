@@ -34,18 +34,19 @@ private:
   }
 
   static void testRemove() {
-    BpTree<int, std::string> tree(3);
+    BpTree<std::string, int> tree(3);
     for (int i = 1; i < 20; ++i) {
-      assert(tree.insert(i, "d"));
+      assert(tree.insert(std::to_string(i), i));
+      tree.printTree();
     }
-    assert(tree.erase(5));
-    assert(!tree.erase(5)); // Remove non-existent
+    assert(tree.erase("5"));
+    assert(!tree.erase("5")); // Remove non-existent
     tree.printTree();
-    assert(tree.erase(16)); // test borrow
+    assert(tree.erase("16")); // test borrow
     tree.printTree();
     for (int i = 1; i < 20; ++i) {
       if (i != 5 && i != 16) {
-        assert(tree.erase(i));
+        assert(tree.erase(std::to_string(i)));
         tree.printTree();
       }
     }
